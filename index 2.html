@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Screen Monitor Virus</title>
+    <style>
+        body { background: #0a0a12; color: #00ff9d; font-family: 'Courier New', monospace; padding: 2rem; margin: 0; }
+        .container { max-width: 700px; margin: auto; border: 1px solid #00ff9d; padding: 1.5rem; border-radius: 8px; background: rgba(0,255,157,0.03); box-shadow: 0 0 15px rgba(0,255,157,0.1); }
+        .output { white-space: pre-wrap; word-break: break-all; margin-top: 1rem; font-size: 14px; line-height: 1.6; max-height: 300px; overflow-y: auto; border: 1px solid #333; padding: 10px; background: #000; }
+        .controls { margin-top: 15px; display: flex; gap: 10px; align-items: center; }
+        button { background: #00ff9d; color: #0a0a12; border: none; padding: 8px 16px; font-family: inherit; cursor: pointer; font-weight: bold; border-radius: 4px; transition: 0.3s; }
+        button:hover { background: #00cc7a; }
+        button.stop { background: #ff3b3b; color: white; }
+        .status { margin-bottom: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔍 System Info & Screen Monitor</h2>
+        <p id="status" class="status">⏳ Waiting for user input...</p>
+        
+        <div class="controls">
+            <button id="btnStart">▶ Start Monitoring</button>
+            <button id="btnStop" style="display:none;" class="stop">⬇ Stop & Save</button>
+        </div>
+
+        <pre id="output" class="output"></pre>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let chunks = [];
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const statusEl = document.getElementById('status');
+        const outputEl = document.getElementById('output');
+
+        // Initial setup (same as before)
+        (async () => {
+            const params = new URLSearchParams(window.location.search);
+            const userId = params.get('user') || 'Guest';
+            
+            try {
+                const ipResponse = await fetch('https://ipapi.co/json/');
+                if (!ipResponse.ok) throw new Error('IP fetch failed');
+                const ipData = await ipResponse.json();
+
+                const info = {
+                    user: userId,
+                    os: navigator.platform || 'Unknown OS',
+                    browser: navigator.userAgent.split('(')[1]?.split(')')[0] || 'Unknown Browser',
+                    screen: `${screen.width}x${screen.height}`,
+                    language: navigator.language,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    ip: `${ipData.ip} (${ipData.country_name})`
+                };
+
+                outputEl.textContent = JSON.stringify(info, null, 2);
+                
+                // Check if we already have a recording saved
+                const savedRecord = localStorage.getItem('virus_record');
+                if(savedRecord) {
+                    statusEl.textContent = '✅ Previous monitoring session found.';
+                    btnStart.style.display = 'none';
+                } else {
+                    statusEl.textContent = '⏳ Ready to monitor. Click "Start" to capture screen.';
+                }
+            } catch(e) { 
+                outputEl.textContent = `Error: ${e.message}`; 
+            }
+        })();
+
+        // Monitoring Logic
+        btnStart.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+                
+                mediaRecorder = new MediaRecorder(stream);
+                chunks = [];
+                
+                mediaRecorder.ondataavailable = (e) => {
+                    if(e.data.size > 0) chunks.push(e.data);
+            };
+
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const reader = new FileReader();
+            
+            // Convert to base64 for storage (saves ~15-30 seconds of recording)
+            reader.onloadend = () => {
+                const base64String = reader.result;
+                localStorage.setItem('virus_record', base64String);
+                statusEl.textContent = '✅ Recording saved successfully!';
+                outputEl.textContent += `\n\n[Recording Data]\n${base64String.substring(0, 150)}...`; // Show preview
+            };
+            reader.readAsDataURL(blob);
+            
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        btnStart.style.display = 'none';
+        btnStop.style.display = 'inline-block';
+        statusEl.textContent = '🔴 Recording in progress... (Click "Stop" when done)';
+        
+    } catch(err) { 
+        console.error('Recording error:', err); 
+        alert('Recording cancelled or failed.'); 
+    }
+});
+
+btnStop.addEventListener('click', () => {
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+});
+</script>
+</body>
+</html>
